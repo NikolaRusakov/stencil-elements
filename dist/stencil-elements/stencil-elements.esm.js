@@ -1,0 +1,1 @@
+import{p as o,b as p}from"./p-fcf63595.js";(()=>{const p=import.meta.url,s={};return""!==p&&(s.resourcesUrl=new URL(".",p).href),o(s)})().then((o=>p([["p-c76fab91",[[0,"my-component",{videoIds:[1,"video-ids"],options:[513],_options:[32]}]]]],o)));

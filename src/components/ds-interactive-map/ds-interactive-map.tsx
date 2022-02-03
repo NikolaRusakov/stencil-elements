@@ -53,7 +53,7 @@ export class DsInteractiveMap {
         // viewBox="-50 0 1060 500"
         // preserveAspectRatio="xMinYMin meet"
         // preserveAspectRatio="xMinYMin slice"
-        width="100vw"
+        width="100%"
         height="50vh"
         viewBox="0 0 1024 768"
         version="1.1"

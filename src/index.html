@@ -10,6 +10,18 @@
   </head>
   <body>
     <div style="height: 100vh"><ds-interactive-map></ds-interactive-map></div>
+
+    <script>
+      let todoListElement = document.getElementsByTagName('ds-interactive-map')[0];
+      console.log(todoListElement);
+      // todoListElement.addEventListener('clickedContinent', event => {
+      //   console.log({ evt: event });
+      // });
+      todoListElement.addEventListener('continent', event => {
+        console.log(event.detail);
+      });
+    </script>
+
     <ds-video-slider
       video-ids="
         fJhk_u8bN-Y,

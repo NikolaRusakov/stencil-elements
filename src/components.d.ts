@@ -5,7 +5,6 @@
  * It contains typing information for all components that exist in this project.
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
-import { OneOfContinents } from "./utils/one-of-continents";
 export namespace Components {
     interface DsInteractiveMap {
     }
@@ -33,7 +32,8 @@ declare global {
 }
 declare namespace LocalJSX {
     interface DsInteractiveMap {
-        "onClicked-continent"?: (event: CustomEvent<OneOfContinents>) => void;
+        "onClickedContinent"?: (event: CustomEvent<MouseEvent>) => void;
+        "onContinent"?: (event: CustomEvent<string>) => void;
     }
     interface DsVideoSlider {
         "videoIds"?: string;

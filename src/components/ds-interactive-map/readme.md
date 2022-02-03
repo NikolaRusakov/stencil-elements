@@ -7,9 +7,10 @@
 
 ## Events
 
-| Event               | Description | Type                                                        |
-| ------------------- | ----------- | ----------------------------------------------------------- |
-| `clicked-continent` |             | `CustomEvent<"africa" \| "americas" \| "asia" \| "europe">` |
+| Event              | Description | Type                      |
+| ------------------ | ----------- | ------------------------- |
+| `clickedContinent` |             | `CustomEvent<MouseEvent>` |
+| `continent`        |             | `CustomEvent<string>`     |
 
 
 ----------------------------------------------

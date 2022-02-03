@@ -1,6 +1,8 @@
 import { EventEmitter } from '../../stencil-public-runtime';
-import { OneOfContinents } from '../../utils/one-of-continents';
 export declare class DsInteractiveMap {
-  clickedContinent: EventEmitter<OneOfContinents>;
+  clickedContinent: EventEmitter<MouseEvent>;
+  continent: EventEmitter<string>;
+  clickedContinentHandler(event: CustomEvent): void;
+  componentDidRender(): void;
   render(): any;
 }

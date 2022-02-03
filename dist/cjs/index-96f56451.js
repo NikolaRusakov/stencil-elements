@@ -45,6 +45,35 @@ const supportsConstructibleStylesheets = /*@__PURE__*/ (() => {
         return false;
     })()
     ;
+const addHostEventListeners = (elm, hostRef, listeners, attachParentListeners) => {
+    if (listeners) {
+        listeners.map(([flags, name, method]) => {
+            const target = elm;
+            const handler = hostListenerProxy(hostRef, method);
+            const opts = hostListenerOpts(flags);
+            plt.ael(target, name, handler, opts);
+            (hostRef.$rmListeners$ = hostRef.$rmListeners$ || []).push(() => plt.rel(target, name, handler, opts));
+        });
+    }
+};
+const hostListenerProxy = (hostRef, methodName) => (ev) => {
+    try {
+        {
+            if (hostRef.$flags$ & 256 /* isListenReady */) {
+                // instance is ready, let's call it's member method for this event
+                hostRef.$lazyInstance$[methodName](ev);
+            }
+            else {
+                (hostRef.$queuedListeners$ = hostRef.$queuedListeners$ || []).push([methodName, ev]);
+            }
+        }
+    }
+    catch (e) {
+        consoleError(e);
+    }
+};
+// prettier-ignore
+const hostListenerOpts = (flags) => (flags & 2 /* Capture */) !== 0;
 const HYDRATED_CSS = '{visibility:hidden}.hydrated{visibility:inherit}';
 const createTime = (fnName, tagName = '') => {
     {
@@ -584,6 +613,13 @@ const dispatchHooks = (hostRef, isInitialLoad) => {
     let promise;
     if (isInitialLoad) {
         {
+            hostRef.$flags$ |= 256 /* isListenReady */;
+            if (hostRef.$queuedListeners$) {
+                hostRef.$queuedListeners$.map(([methodName, event]) => safeCall(instance, methodName, event));
+                hostRef.$queuedListeners$ = null;
+            }
+        }
+        {
             promise = safeCall(instance, 'componentWillLoad');
         }
     }
@@ -982,12 +1018,24 @@ const connectedCallback = (elm) => {
                 initializeComponent(elm, hostRef, cmpMeta);
             }
         }
+        else {
+            // not the first time this has connected
+            // reattach any event listeners to the host
+            // since they would have been removed when disconnected
+            addHostEventListeners(elm, hostRef, cmpMeta.$listeners$);
+        }
         endConnected();
     }
 };
 const disconnectedCallback = (elm) => {
     if ((plt.$flags$ & 1 /* isTmpDisconnected */) === 0) {
-        getHostRef(elm);
+        const hostRef = getHostRef(elm);
+        {
+            if (hostRef.$rmListeners$) {
+                hostRef.$rmListeners$.map((rmListener) => rmListener());
+                hostRef.$rmListeners$ = undefined;
+            }
+        }
     }
 };
 const bootstrapLazy = (lazyBundles, options = {}) => {
@@ -1013,6 +1061,9 @@ const bootstrapLazy = (lazyBundles, options = {}) => {
             };
             {
                 cmpMeta.$members$ = compactMeta[2];
+            }
+            {
+                cmpMeta.$listeners$ = compactMeta[3];
             }
             {
                 cmpMeta.$attrsToReflect$ = [];
@@ -1089,6 +1140,7 @@ const registerHost = (elm, cmpMeta) => {
         elm['s-p'] = [];
         elm['s-rc'] = [];
     }
+    addHostEventListeners(elm, hostRef, cmpMeta.$listeners$);
     return hostRefs.set(elm, hostRef);
 };
 const isMemberInElement = (elm, memberName) => memberName in elm;

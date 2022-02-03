@@ -5,37 +5,50 @@
  * It contains typing information for all components that exist in this project.
  */
 import { HTMLStencilElement, JSXBase } from "./stencil-public-runtime";
+import { OneOfContinents } from "./utils/one-of-continents";
 export namespace Components {
-    interface MyComponent {
-        "options": string;
+    interface DsInteractiveMap {
+    }
+    interface DsVideoSlider {
         "videoIds": string;
     }
 }
 declare global {
-    interface HTMLMyComponentElement extends Components.MyComponent, HTMLStencilElement {
+    interface HTMLDsInteractiveMapElement extends Components.DsInteractiveMap, HTMLStencilElement {
     }
-    var HTMLMyComponentElement: {
-        prototype: HTMLMyComponentElement;
-        new (): HTMLMyComponentElement;
+    var HTMLDsInteractiveMapElement: {
+        prototype: HTMLDsInteractiveMapElement;
+        new (): HTMLDsInteractiveMapElement;
+    };
+    interface HTMLDsVideoSliderElement extends Components.DsVideoSlider, HTMLStencilElement {
+    }
+    var HTMLDsVideoSliderElement: {
+        prototype: HTMLDsVideoSliderElement;
+        new (): HTMLDsVideoSliderElement;
     };
     interface HTMLElementTagNameMap {
-        "my-component": HTMLMyComponentElement;
+        "ds-interactive-map": HTMLDsInteractiveMapElement;
+        "ds-video-slider": HTMLDsVideoSliderElement;
     }
 }
 declare namespace LocalJSX {
-    interface MyComponent {
-        "options"?: string;
+    interface DsInteractiveMap {
+        "onClicked-continent"?: (event: CustomEvent<OneOfContinents>) => void;
+    }
+    interface DsVideoSlider {
         "videoIds"?: string;
     }
     interface IntrinsicElements {
-        "my-component": MyComponent;
+        "ds-interactive-map": DsInteractiveMap;
+        "ds-video-slider": DsVideoSlider;
     }
 }
 export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
-            "my-component": LocalJSX.MyComponent & JSXBase.HTMLAttributes<HTMLMyComponentElement>;
+            "ds-interactive-map": LocalJSX.DsInteractiveMap & JSXBase.HTMLAttributes<HTMLDsInteractiveMapElement>;
+            "ds-video-slider": LocalJSX.DsVideoSlider & JSXBase.HTMLAttributes<HTMLDsVideoSliderElement>;
         }
     }
 }

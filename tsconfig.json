@@ -15,10 +15,12 @@
     "noUnusedParameters": true,
     "jsx": "react",
     "jsxFactory": "h",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": [
-    "src"
+    "src",
+    "src/components/ds-video-slider/ds-video-slider.e2e.ts"
   ],
   "exclude": [
     "node_modules"

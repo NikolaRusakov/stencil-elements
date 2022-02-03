@@ -1,0 +1,14 @@
+svg {
+  margin: 0 auto;
+}
+
+.land {
+  fill: #003366;
+  fill-opacity: 1;
+  stroke: white;
+  stroke-opacity: 1;
+  stroke-width: 2px;
+}
+.land.highlight {
+  fill: #f4983b;
+}

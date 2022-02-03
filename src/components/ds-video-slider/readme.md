@@ -9,7 +9,6 @@
 
 | Property   | Attribute   | Description | Type     | Default |
 | ---------- | ----------- | ----------- | -------- | ------- |
-| `options`  | `options`   |             | `string` | `''`    |
 | `videoIds` | `video-ids` |             | `string` | `''`    |
 
 

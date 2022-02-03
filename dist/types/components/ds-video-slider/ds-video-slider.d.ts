@@ -1,11 +1,9 @@
 export declare class MyComponent {
-  videoIds: string;
-  videoIdsChanged(source?: Array<string>): void;
   el: HTMLElement;
-  options: string;
-  _options: string[];
+  videoIds: string;
+  _videoIds: string[];
   componentWillLoad(): void;
-  parseOptions(): void;
+  parsevideoIds(): void;
   stringToArray<T>(arg: T[] | string): T[];
   componentDidRender(): void;
   render(): any;

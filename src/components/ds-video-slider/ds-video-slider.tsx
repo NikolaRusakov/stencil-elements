@@ -3,32 +3,31 @@ import Splide from '@splidejs/splide';
 import { Video } from '@splidejs/splide-extension-video';
 
 @Component({
-  tag: 'my-component',
-  styleUrl: 'my-component.scss',
+  tag: 'ds-video-slider',
+  styleUrl: 'ds-video-slider.scss',
   shadow: false,
   assetsDirs: ['assets'],
   // shadow: true,
 })
 export class MyComponent {
-  @Prop() videoIds: string = '';
-  @Watch('videoIds') videoIdsChanged(source: Array<string> = []) {
-    let newSource = [...source];
-    console.log(newSource);
-  }
+  // @Prop() videoIds: string = '';
+  // @Watch('videoIds') videoIdsChanged(source: Array<string> = []) {
+  //   let newSource = [...source];
+  //   console.log(newSource);
+  // }
   @Element() el: HTMLElement;
 
-  @Prop({ attribute: 'options', reflect: true }) options: string = '';
-  @State() _options: string[] = [];
+  @Prop({ attribute: 'video-ids', reflect: true }) videoIds: string = '';
+  @State() _videoIds: string[] = [];
 
   componentWillLoad() {
-    this.parseOptions();
+    this.parsevideoIds();
   }
-  @Watch('options')
-  parseOptions() {
-    if (this.options) {
-      // this._options = this.stringToArray(this.options);
-      // this._options = JSON.parse(this.options);
-      this._options = this.options.split(',').map(x => x.trim());
+  @Watch('videoIds')
+  parsevideoIds() {
+    if (this.videoIds) {
+      // this._videoIds = JSON.parse(this.videoIds);
+      this._videoIds = this.videoIds.split(',').map(x => x.trim());
     }
   }
   stringToArray<T>(arg: T[] | string): T[] {
@@ -40,15 +39,10 @@ export class MyComponent {
 
     return opts as T[];
   }
-  // connectedCallback() {
-  //   this.videoIdsChanged(this.videoIds);
-  // }
   componentDidRender() {
-    console.log({ opt: this._options });
-    // new Splide(this.el!.getElementById('image-slider')!).mount({ Video });
+    console.log({ opt: this._videoIds });
 
     new Splide('.splide', {
-      // arrows: false,
       hasSliderWrapper: true,
       classes: {
         prev: 'splide__arrow--prev my-class-prev',
@@ -83,7 +77,7 @@ export class MyComponent {
 
           <div class="splide__track">
             <ul class="splide__list">
-              {this._options.map(id => (
+              {this._videoIds.map(id => (
                 <li class="splide__slide" data-splide-youtube={id}>
                   <img class="img-thumbnail" src={`https://i3.ytimg.com/vi/${id}/maxresdefault.jpg`} />
                   {/* <li class="splide__slide" data-splide-youtube={'cdz__ojQOuU'}> */}

@@ -1,4 +1,4 @@
-import { HTMLElement as HTMLElement$1, h, proxyCustomElement } from '@stencil/core/internal/client';
+import { r as registerInstance, h, g as getElement } from './index-6399bbb2.js';
 
 /*!
  * Splide.js
@@ -297,6 +297,10 @@ function clamp$1(number, x, y) {
 
 function sign(x) {
   return +(x > 0) - +(x < 0);
+}
+
+function camelToKebab(string) {
+  return string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
 function format(string, replacements) {
@@ -2468,6 +2472,373 @@ let Splide = _Splide;
 Splide.defaults = {};
 Splide.STATES = STATES;
 
+const CLASS_RENDERED = "is-rendered";
+
+const RENDERER_DEFAULT_CONFIG = {
+  listTag: "ul",
+  slideTag: "li"
+};
+
+class Style {
+  constructor(id, options) {
+    this.styles = {};
+    this.id = id;
+    this.options = options;
+  }
+  rule(selector, prop, value, breakpoint) {
+    breakpoint = breakpoint || "default";
+    const selectors = this.styles[breakpoint] = this.styles[breakpoint] || {};
+    const styles = selectors[selector] = selectors[selector] || {};
+    styles[prop] = value;
+  }
+  build() {
+    let css = "";
+    if (this.styles.default) {
+      css += this.buildSelectors(this.styles.default);
+    }
+    Object.keys(this.styles).sort((n, m) => this.options.mediaQuery === "min" ? +n - +m : +m - +n).forEach((breakpoint) => {
+      if (breakpoint !== "default") {
+        css += `@media screen and (max-width: ${breakpoint}px) {`;
+        css += this.buildSelectors(this.styles[breakpoint]);
+        css += `}`;
+      }
+    });
+    return css;
+  }
+  buildSelectors(selectors) {
+    let css = "";
+    forOwn$1(selectors, (styles, selector) => {
+      selector = `#${this.id} ${selector}`.trim();
+      css += `${selector} {`;
+      forOwn$1(styles, (value, prop) => {
+        if (value || value === 0) {
+          css += `${prop}: ${value};`;
+        }
+      });
+      css += "}";
+    });
+    return css;
+  }
+}
+
+class SplideRenderer {
+  constructor(contents, options, config, defaults) {
+    this.slides = [];
+    this.options = {};
+    this.breakpoints = [];
+    merge$1(DEFAULTS, defaults || {});
+    merge$1(merge$1(this.options, DEFAULTS), options || {});
+    this.contents = contents;
+    this.config = assign$1({}, RENDERER_DEFAULT_CONFIG, config || {});
+    this.id = this.config.id || uniqueId("splide");
+    this.Style = new Style(this.id, this.options);
+    this.Direction = Direction(null, null, this.options);
+    assert(this.contents.length, "Provide at least 1 content.");
+    this.init();
+  }
+  static clean(splide) {
+    const { on } = EventInterface$1(splide);
+    const { root } = splide;
+    const clones = queryAll$1(root, `.${CLASS_CLONE}`);
+    on(EVENT_MOUNTED$1, () => {
+      remove$1(child$1(root, "style"));
+    });
+    remove$1(clones);
+  }
+  init() {
+    this.parseBreakpoints();
+    this.initSlides();
+    this.registerRootStyles();
+    this.registerTrackStyles();
+    this.registerSlideStyles();
+    this.registerListStyles();
+  }
+  initSlides() {
+    push(this.slides, this.contents.map((content, index) => {
+      content = isString$1(content) ? { html: content } : content;
+      content.styles = content.styles || {};
+      content.attrs = content.attrs || {};
+      this.cover(content);
+      const classes = `${this.options.classes.slide} ${index === 0 ? CLASS_ACTIVE : ""}`;
+      assign$1(content.attrs, {
+        class: `${classes} ${content.attrs.class || ""}`.trim(),
+        style: this.buildStyles(content.styles)
+      });
+      return content;
+    }));
+    if (this.isLoop()) {
+      this.generateClones(this.slides);
+    }
+  }
+  registerRootStyles() {
+    this.breakpoints.forEach(([width, options]) => {
+      this.Style.rule(" ", "max-width", unit(options.width), width);
+    });
+  }
+  registerTrackStyles() {
+    const { Style: Style2 } = this;
+    const selector = `.${CLASS_TRACK}`;
+    this.breakpoints.forEach(([width, options]) => {
+      Style2.rule(selector, this.resolve("paddingLeft"), this.cssPadding(options, false), width);
+      Style2.rule(selector, this.resolve("paddingRight"), this.cssPadding(options, true), width);
+      Style2.rule(selector, "height", this.cssTrackHeight(options), width);
+    });
+  }
+  registerListStyles() {
+    const { Style: Style2 } = this;
+    const selector = `.${CLASS_LIST}`;
+    this.breakpoints.forEach(([width, options]) => {
+      Style2.rule(selector, "transform", this.buildTranslate(options), width);
+      if (!this.cssSlideHeight(options)) {
+        Style2.rule(selector, "aspect-ratio", this.cssAspectRatio(options), width);
+      }
+    });
+  }
+  registerSlideStyles() {
+    const { Style: Style2 } = this;
+    const selector = `.${CLASS_SLIDE}`;
+    this.breakpoints.forEach(([width, options]) => {
+      Style2.rule(selector, "width", this.cssSlideWidth(options), width);
+      Style2.rule(selector, "height", this.cssSlideHeight(options) || "100%", width);
+      Style2.rule(selector, this.resolve("marginRight"), unit(options.gap) || "0px", width);
+      Style2.rule(`${selector} > img`, "display", options.cover ? "none" : "inline", width);
+    });
+  }
+  buildTranslate(options) {
+    const { resolve, orient } = this.Direction;
+    const values = [];
+    values.push(this.cssOffsetClones(options));
+    values.push(this.cssOffsetGaps(options));
+    if (this.isCenter(options)) {
+      values.push(this.buildCssValue(orient(-50), "%"));
+      values.push(...this.cssOffsetCenter(options));
+    }
+    return values.filter(Boolean).map((value) => `translate${resolve("X")}(${value})`).join(" ");
+  }
+  cssOffsetClones(options) {
+    const { resolve, orient } = this.Direction;
+    const cloneCount = this.getCloneCount();
+    if (this.isFixedWidth(options)) {
+      const { value, unit: unit2 } = this.parseCssValue(options[resolve("fixedWidth")]);
+      return this.buildCssValue(orient(value) * cloneCount, unit2);
+    }
+    const percent = 100 * cloneCount / options.perPage;
+    return `${orient(percent)}%`;
+  }
+  cssOffsetCenter(options) {
+    const { resolve, orient } = this.Direction;
+    if (this.isFixedWidth(options)) {
+      const { value, unit: unit2 } = this.parseCssValue(options[resolve("fixedWidth")]);
+      return [this.buildCssValue(orient(value / 2), unit2)];
+    }
+    const values = [];
+    const { perPage, gap } = options;
+    values.push(`${orient(50 / perPage)}%`);
+    if (gap) {
+      const { value, unit: unit2 } = this.parseCssValue(gap);
+      const gapOffset = (value / perPage - value) / 2;
+      values.push(this.buildCssValue(orient(gapOffset), unit2));
+    }
+    return values;
+  }
+  cssOffsetGaps(options) {
+    const cloneCount = this.getCloneCount();
+    if (cloneCount && options.gap) {
+      const { orient } = this.Direction;
+      const { value, unit: unit2 } = this.parseCssValue(options.gap);
+      if (this.isFixedWidth(options)) {
+        return this.buildCssValue(orient(value * cloneCount), unit2);
+      }
+      const { perPage } = options;
+      const gaps = cloneCount / perPage;
+      return this.buildCssValue(orient(gaps * value), unit2);
+    }
+    return "";
+  }
+  resolve(prop) {
+    return camelToKebab(this.Direction.resolve(prop));
+  }
+  cssPadding(options, right) {
+    const { padding } = options;
+    const prop = this.Direction.resolve(right ? "right" : "left", true);
+    return padding && unit(padding[prop] || (isObject$1(padding) ? 0 : padding)) || "0px";
+  }
+  cssTrackHeight(options) {
+    let height = "";
+    if (this.isVertical()) {
+      height = this.cssHeight(options);
+      assert(height, '"height" is missing.');
+      height = `calc(${height} - ${this.cssPadding(options, false)} - ${this.cssPadding(options, true)})`;
+    }
+    return height;
+  }
+  cssHeight(options) {
+    return unit(options.height);
+  }
+  cssSlideWidth(options) {
+    return options.autoWidth ? "" : unit(options.fixedWidth) || (this.isVertical() ? "" : this.cssSlideSize(options));
+  }
+  cssSlideHeight(options) {
+    return unit(options.fixedHeight) || (this.isVertical() ? options.autoHeight ? "" : this.cssSlideSize(options) : this.cssHeight(options));
+  }
+  cssSlideSize(options) {
+    const gap = unit(options.gap);
+    return `calc((100%${gap && ` + ${gap}`})/${options.perPage || 1}${gap && ` - ${gap}`})`;
+  }
+  cssAspectRatio(options) {
+    const { heightRatio } = options;
+    return heightRatio ? `${1 / heightRatio}` : "";
+  }
+  buildCssValue(value, unit2) {
+    return `${value}${unit2}`;
+  }
+  parseCssValue(value) {
+    if (isString$1(value)) {
+      const number = parseFloat(value) || 0;
+      const unit2 = value.replace(/\d*(\.\d*)?/, "") || "px";
+      return { value: number, unit: unit2 };
+    }
+    return { value, unit: "px" };
+  }
+  parseBreakpoints() {
+    const { breakpoints } = this.options;
+    this.breakpoints.push(["default", this.options]);
+    if (breakpoints) {
+      forOwn$1(breakpoints, (options, width) => {
+        this.breakpoints.push([width, merge$1(merge$1({}, this.options), options)]);
+      });
+    }
+  }
+  isFixedWidth(options) {
+    return !!options[this.Direction.resolve("fixedWidth")];
+  }
+  isLoop() {
+    return this.options.type === LOOP;
+  }
+  isCenter(options) {
+    if (options.focus === "center") {
+      if (this.isLoop()) {
+        return true;
+      }
+      if (this.options.type === SLIDE) {
+        return !this.options.trimSpace;
+      }
+    }
+    return false;
+  }
+  isVertical() {
+    return this.options.direction === TTB;
+  }
+  buildClasses() {
+    const { options } = this;
+    return [
+      CLASS_ROOT,
+      `${CLASS_ROOT}--${options.type}`,
+      `${CLASS_ROOT}--${options.direction}`,
+      options.drag && `${CLASS_ROOT}--draggable`,
+      options.isNavigation && `${CLASS_ROOT}--nav`,
+      CLASS_ACTIVE,
+      !this.config.hidden && CLASS_RENDERED
+    ].filter(Boolean).join(" ");
+  }
+  buildAttrs(attrs) {
+    let attr = "";
+    forOwn$1(attrs, (value, key) => {
+      attr += value ? ` ${camelToKebab(key)}="${value}"` : "";
+    });
+    return attr.trim();
+  }
+  buildStyles(styles) {
+    let style = "";
+    forOwn$1(styles, (value, key) => {
+      style += ` ${camelToKebab(key)}:${value};`;
+    });
+    return style.trim();
+  }
+  renderSlides() {
+    const { slideTag: tag } = this.config;
+    return this.slides.map((content) => {
+      return `<${tag} ${this.buildAttrs(content.attrs)}>${content.html || ""}</${tag}>`;
+    }).join("");
+  }
+  cover(content) {
+    const { styles, html = "" } = content;
+    if (this.options.cover && !this.options.lazyLoad) {
+      const src = html.match(/<img.*?src\s*=\s*(['"])(.+?)\1.*?>/);
+      if (src && src[2]) {
+        styles.background = `center/cover no-repeat url('${src[2]}')`;
+      }
+    }
+  }
+  generateClones(contents) {
+    const { classes } = this.options;
+    const count = this.getCloneCount();
+    const slides = contents.slice();
+    while (slides.length < count) {
+      push(slides, slides);
+    }
+    push(slides.slice(-count).reverse(), slides.slice(0, count)).forEach((content, index) => {
+      const attrs = assign$1({}, content.attrs, { class: `${content.attrs.class} ${classes.clone}` });
+      const clone = assign$1({}, content, { attrs });
+      index < count ? contents.unshift(clone) : contents.push(clone);
+    });
+  }
+  getCloneCount() {
+    if (this.isLoop()) {
+      const { options } = this;
+      if (options.clones) {
+        return options.clones;
+      }
+      const perPage = max$1(...this.breakpoints.map(([, options2]) => options2.perPage));
+      return perPage * ((options.flickMaxPages || 1) + 1);
+    }
+    return 0;
+  }
+  renderArrows() {
+    let html = "";
+    html += `<div class="${this.options.classes.arrows}">`;
+    html += this.renderArrow(true);
+    html += this.renderArrow(false);
+    html += `</div>`;
+    return html;
+  }
+  renderArrow(prev) {
+    const { classes, i18n } = this.options;
+    const attrs = {
+      class: `${classes.arrow} ${prev ? classes.prev : classes.next}`,
+      type: "button",
+      ariaLabel: prev ? i18n.prev : i18n.next
+    };
+    return `<button ${this.buildAttrs(attrs)}><svg xmlns="${XML_NAME_SPACE}" viewBox="0 0 ${SIZE} ${SIZE}" width="${SIZE}" height="${SIZE}"><path d="${this.options.arrowPath || PATH}" /></svg></button>`;
+  }
+  html() {
+    const { rootClass, listTag, arrows, beforeTrack, afterTrack, slider, beforeSlider, afterSlider } = this.config;
+    let html = "";
+    html += `<div id="${this.id}" class="${this.buildClasses()} ${rootClass || ""}">`;
+    html += `<style>${this.Style.build()}</style>`;
+    if (slider) {
+      html += beforeSlider || "";
+      html += `<div class="splide__slider">`;
+    }
+    html += beforeTrack || "";
+    if (arrows) {
+      html += this.renderArrows();
+    }
+    html += `<div class="splide__track">`;
+    html += `<${listTag} class="splide__list">`;
+    html += this.renderSlides();
+    html += `</${listTag}>`;
+    html += `</div>`;
+    html += afterTrack || "";
+    if (slider) {
+      html += `</div>`;
+      html += afterSlider || "";
+    }
+    html += `</div>`;
+    return html;
+  }
+}
+
 /*!
  * Splide.js
  * Version  : 0.6.8
@@ -4614,12 +4985,11 @@ function Video(Splide4, Components) {
   };
 }
 
-const dsVideoSliderCss = ".splide--nav>.splide__slider>.splide__track>.splide__list>.splide__slide,.splide--nav>.splide__track>.splide__list>.splide__slide{border:3px solid transparent;cursor:pointer;opacity:.7}.splide--nav>.splide__slider>.splide__track>.splide__list>.splide__slide.is-active,.splide--nav>.splide__track>.splide__list>.splide__slide.is-active{border:3px solid #00bfff;opacity:1}.splide--nav>.splide__slider>.splide__track>.splide__list>.splide__slide:focus,.splide--nav>.splide__track>.splide__list>.splide__slide:focus{outline:none}.splide__arrow{background:transparent;border:0;cursor:pointer;padding:0;position:absolute;top:50%;transform:translateY(-50%);z-index:1}.splide__arrow svg{fill:#00bfff;height:2.5em;transition:fill .2s linear;width:2.5em}.splide__arrow:hover svg{fill:#66d9ff}.splide__arrow:focus{outline:none}.splide__arrow--prev{left:1em}.splide__arrow--prev svg{transform:scaleX(-1)}.splide__arrow--next{right:1em}.splide__pagination{bottom:.5em;left:0;padding:0 1em;position:absolute;right:0;z-index:1}.splide__pagination__page{background:#ccc;border:0;border-radius:50%;display:inline-block;height:10px;margin:3px;padding:0;transition:all .2s linear;width:10px}.splide__pagination__page.is-active{background:#00bfff;transform:scale(1.4)}.splide__pagination__page:hover{background:#66d9ff;cursor:pointer;opacity:.9}.splide__pagination__page:focus{outline:none}.splide__container{box-sizing:border-box;position:relative}.splide__list{-webkit-backface-visibility:hidden;backface-visibility:hidden;display:-ms-flexbox;display:flex;height:100%;margin:0!important;padding:0!important;transform-style:preserve-3d}.splide.is-initialized:not(.is-active) .splide__list{display:block}.splide__pagination{-ms-flex-align:center;align-items:center;display:-ms-flexbox;display:flex;-ms-flex-wrap:wrap;flex-wrap:wrap;-ms-flex-pack:center;justify-content:center;margin:0;pointer-events:none}.splide__pagination li{display:inline-block;line-height:1;list-style-type:none;margin:0;pointer-events:auto}.splide__progress__bar{width:0}.splide{outline:none;position:relative;visibility:hidden}.splide.is-initialized,.splide.is-rendered{visibility:visible}.splide__slide{-webkit-backface-visibility:hidden;backface-visibility:hidden;box-sizing:border-box;-ms-flex-negative:0;flex-shrink:0;list-style-type:none!important;margin:0;outline:none;position:relative}.splide__slide img{vertical-align:bottom}.splide__slider{position:relative}.splide__spinner{animation:splide-loading 1s linear infinite;border:2px solid #00bfff;border-left-color:transparent;border-radius:50%;bottom:0;contain:strict;display:inline-block;height:20px;left:0;margin:auto;position:absolute;right:0;top:0;width:20px}.splide__track{overflow:hidden;position:relative;z-index:0}@keyframes splide-loading{0%{transform:rotate(0)}to{transform:rotate(1turn)}}.splide--draggable>.splide__slider>.splide__track,.splide--draggable>.splide__track{-webkit-user-select:none;-ms-user-select:none;user-select:none}.splide--fade>.splide__slider>.splide__track>.splide__list,.splide--fade>.splide__track>.splide__list{display:block}.splide--fade>.splide__slider>.splide__track>.splide__list>.splide__slide,.splide--fade>.splide__track>.splide__list>.splide__slide{left:0;opacity:0;position:absolute;top:0;z-index:0}.splide--fade>.splide__slider>.splide__track>.splide__list>.splide__slide.is-active,.splide--fade>.splide__track>.splide__list>.splide__slide.is-active{opacity:1;position:relative;z-index:1}.splide--rtl{direction:rtl}.splide--ttb.is-active>.splide__slider>.splide__track>.splide__list,.splide--ttb.is-active>.splide__track>.splide__list{display:block}.splide__progress__bar{background:#ccc;height:3px}.splide--rtl>.splide__arrows .splide__arrow--prev,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--prev{left:auto;right:1em}.splide--rtl>.splide__arrows .splide__arrow--prev svg,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev svg,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--prev svg{transform:scaleX(1)}.splide--rtl>.splide__arrows .splide__arrow--next,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--next{left:1em;right:auto}.splide--rtl>.splide__arrows .splide__arrow--next svg,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next svg,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--next svg{transform:scaleX(-1)}.splide--ttb>.splide__arrows .splide__arrow,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow,.splide--ttb>.splide__track>.splide__arrows .splide__arrow{left:50%;transform:translate(-50%)}.splide--ttb>.splide__arrows .splide__arrow--prev,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--prev{top:1em}.splide--ttb>.splide__arrows .splide__arrow--prev svg,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev svg,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--prev svg{transform:rotate(-90deg)}.splide--ttb>.splide__arrows .splide__arrow--next,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--next{bottom:1em;top:auto}.splide--ttb>.splide__arrows .splide__arrow--next svg,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next svg,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--next svg{transform:rotate(90deg)}.splide--ttb>.splide__pagination,.splide--ttb>.splide__slider>.splide__pagination{bottom:0;display:-ms-flexbox;display:flex;-ms-flex-direction:column;flex-direction:column;left:auto;padding:1em 0;right:.5em;top:0}.splide__slide--has-video{cursor:pointer}.splide__slide--has-video:hover .splide__video__play{opacity:1}.splide__slide__container--has-video{cursor:pointer;position:relative}.splide__slide__container--has-video:hover .splide__video__play{opacity:1}.splide__video{height:100%;left:0;position:absolute;top:0;width:100%}.splide__video__wrapper{background:#000;height:inherit;width:inherit}.splide__video__wrapper div,.splide__video__wrapper iframe,.splide__video__wrapper video{height:100%;width:100%}.splide__video__play{align-items:center;background:#ccc;border:0;border-radius:50%;cursor:pointer;display:flex;height:40px;justify-content:center;left:50%;opacity:.7;position:absolute;top:50%;transform:translate(-50%,-50%);transition:opacity .1s linear;width:40px}.splide__video__play:after{border-color:transparent transparent transparent #000;border-style:solid;border-width:9px 0 9px 17px;content:\"\";display:inline-block;margin-left:4px}.splide__video__play::after{content:\"\";display:none}.splide__video__play{background-image:url(\"assets/play_icon.svg\") !important;background:transparent;background-size:cover;background-repeat:no-repeat;background-position:center center;border-radius:50%;cursor:pointer;display:flex;width:25%;height:45%}.splide__track{border-radius:40px}.splide__slide{background-color:black}.splide__arrow svg{height:48px;width:48px}@media screen and (min-width: 1024px){.splide__arrow svg{height:92px;width:92px}}@media screen and (min-width: 1920px){.splide__arrow svg{height:128px;width:128px}}.img-thumbnail{border-radius:40px;width:100%;height:100%;object-fit:cover}";
+const dsVideoSliderCss = ".splide--nav>.splide__slider>.splide__track>.splide__list>.splide__slide,.splide--nav>.splide__track>.splide__list>.splide__slide{border:3px solid transparent;cursor:pointer;opacity:.7}.splide--nav>.splide__slider>.splide__track>.splide__list>.splide__slide.is-active,.splide--nav>.splide__track>.splide__list>.splide__slide.is-active{border:3px solid #00bfff;opacity:1}.splide--nav>.splide__slider>.splide__track>.splide__list>.splide__slide:focus,.splide--nav>.splide__track>.splide__list>.splide__slide:focus{outline:none}.splide__arrow{background:transparent;border:0;cursor:pointer;padding:0;position:absolute;top:50%;transform:translateY(-50%);z-index:1}.splide__arrow svg{fill:#00bfff;height:2.5em;transition:fill .2s linear;width:2.5em}.splide__arrow:hover svg{fill:#66d9ff}.splide__arrow:focus{outline:none}.splide__arrow--prev{left:1em}.splide__arrow--prev svg{transform:scaleX(-1)}.splide__arrow--next{right:1em}.splide__pagination{bottom:.5em;left:0;padding:0 1em;position:absolute;right:0;z-index:1}.splide__pagination__page{background:#ccc;border:0;border-radius:50%;display:inline-block;height:10px;margin:3px;padding:0;transition:all .2s linear;width:10px}.splide__pagination__page.is-active{background:#00bfff;transform:scale(1.4)}.splide__pagination__page:hover{background:#66d9ff;cursor:pointer;opacity:.9}.splide__pagination__page:focus{outline:none}.splide__container{box-sizing:border-box;position:relative}.splide__list{-webkit-backface-visibility:hidden;backface-visibility:hidden;display:-ms-flexbox;display:flex;height:100%;margin:0!important;padding:0!important;transform-style:preserve-3d}.splide.is-initialized:not(.is-active) .splide__list{display:block}.splide__pagination{-ms-flex-align:center;align-items:center;display:-ms-flexbox;display:flex;-ms-flex-wrap:wrap;flex-wrap:wrap;-ms-flex-pack:center;justify-content:center;margin:0;pointer-events:none}.splide__pagination li{display:inline-block;line-height:1;list-style-type:none;margin:0;pointer-events:auto}.splide__progress__bar{width:0}.splide{outline:none;position:relative;visibility:hidden}.splide.is-initialized,.splide.is-rendered{visibility:visible}.splide__slide{-webkit-backface-visibility:hidden;backface-visibility:hidden;box-sizing:border-box;-ms-flex-negative:0;flex-shrink:0;list-style-type:none!important;margin:0;outline:none;position:relative}.splide__slide img{vertical-align:bottom}.splide__slider{position:relative}.splide__spinner{animation:splide-loading 1s linear infinite;border:2px solid #00bfff;border-left-color:transparent;border-radius:50%;bottom:0;contain:strict;display:inline-block;height:20px;left:0;margin:auto;position:absolute;right:0;top:0;width:20px}.splide__track{overflow:hidden;position:relative;z-index:0}@keyframes splide-loading{0%{transform:rotate(0)}to{transform:rotate(1turn)}}.splide--draggable>.splide__slider>.splide__track,.splide--draggable>.splide__track{-webkit-user-select:none;-ms-user-select:none;user-select:none}.splide--fade>.splide__slider>.splide__track>.splide__list,.splide--fade>.splide__track>.splide__list{display:block}.splide--fade>.splide__slider>.splide__track>.splide__list>.splide__slide,.splide--fade>.splide__track>.splide__list>.splide__slide{left:0;opacity:0;position:absolute;top:0;z-index:0}.splide--fade>.splide__slider>.splide__track>.splide__list>.splide__slide.is-active,.splide--fade>.splide__track>.splide__list>.splide__slide.is-active{opacity:1;position:relative;z-index:1}.splide--rtl{direction:rtl}.splide--ttb.is-active>.splide__slider>.splide__track>.splide__list,.splide--ttb.is-active>.splide__track>.splide__list{display:block}.splide__progress__bar{background:#ccc;height:3px}.splide--rtl>.splide__arrows .splide__arrow--prev,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--prev{left:auto;right:1em}.splide--rtl>.splide__arrows .splide__arrow--prev svg,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev svg,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--prev svg{transform:scaleX(1)}.splide--rtl>.splide__arrows .splide__arrow--next,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--next{left:1em;right:auto}.splide--rtl>.splide__arrows .splide__arrow--next svg,.splide--rtl>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next svg,.splide--rtl>.splide__track>.splide__arrows .splide__arrow--next svg{transform:scaleX(-1)}.splide--ttb>.splide__arrows .splide__arrow,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow,.splide--ttb>.splide__track>.splide__arrows .splide__arrow{left:50%;transform:translate(-50%)}.splide--ttb>.splide__arrows .splide__arrow--prev,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--prev{top:1em}.splide--ttb>.splide__arrows .splide__arrow--prev svg,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--prev svg,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--prev svg{transform:rotate(-90deg)}.splide--ttb>.splide__arrows .splide__arrow--next,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--next{bottom:1em;top:auto}.splide--ttb>.splide__arrows .splide__arrow--next svg,.splide--ttb>.splide__slider>.splide__track>.splide__arrows .splide__arrow--next svg,.splide--ttb>.splide__track>.splide__arrows .splide__arrow--next svg{transform:rotate(90deg)}.splide--ttb>.splide__pagination,.splide--ttb>.splide__slider>.splide__pagination{bottom:0;display:-ms-flexbox;display:flex;-ms-flex-direction:column;flex-direction:column;left:auto;padding:1em 0;right:.5em;top:0}.splide__slide--has-video{cursor:pointer}.splide__slide--has-video:hover .splide__video__play{opacity:1}.splide__slide__container--has-video{cursor:pointer;position:relative}.splide__slide__container--has-video:hover .splide__video__play{opacity:1}.splide__video{height:100%;left:0;position:absolute;top:0;width:100%}.splide__video__wrapper{background:#000;height:inherit;width:inherit}.splide__video__wrapper div,.splide__video__wrapper iframe,.splide__video__wrapper video{height:100%;width:100%}.splide__video__play{align-items:center;background:#ccc;border:0;border-radius:50%;cursor:pointer;display:flex;height:40px;justify-content:center;left:50%;opacity:.7;position:absolute;top:50%;transform:translate(-50%,-50%);transition:opacity .1s linear;width:40px}.splide__video__play:after{border-color:transparent transparent transparent #000;border-style:solid;border-width:9px 0 9px 17px;content:\"\";display:inline-block;margin-left:4px}.splide__video__play::after{content:\"\";display:none}.splide__video__play{background-image:url(\"data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTQwIiBoZWlnaHQ9IjU0MCIgdmlld0JveD0iMCAwIDU0MCA1NDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+DQogIDxwYXRoIGQ9Ik0yNzAgMzMuNzVDMTM5LjUzNSAzMy43NSAzMy43NSAxMzkuNTM1IDMzLjc1IDI3MEMzMy43NSA0MDAuNDY1IDEzOS41MzUgNTA2LjI1IDI3MCA1MDYuMjVDNDAwLjQ2NSA1MDYuMjUgNTA2LjI1IDQwMC40NjUgNTA2LjI1IDI3MEM1MDYuMjUgMTM5LjUzNSA0MDAuNDY1IDMzLjc1IDI3MCAzMy43NVpNMzQ1Ljk5IDI3My42MzlMMjMwLjgxOCAzNTcuNDM0QzIzMC4xODcgMzU3Ljg4NyAyMjkuNDQzIDM1OC4xNTggMjI4LjY2NyAzNTguMjE2QzIyNy44OTIgMzU4LjI3NSAyMjcuMTE2IDM1OC4xMTggMjI2LjQyMyAzNTcuNzY0QzIyNS43MzEgMzU3LjQxIDIyNS4xNSAzNTYuODcxIDIyNC43NDQgMzU2LjIwOEMyMjQuMzM4IDM1NS41NDYgMjI0LjEyMiAzNTQuNzgzIDIyNC4xMjEgMzU0LjAwNlYxODYuNTIxQzIyNC4xMTkgMTg1Ljc0MiAyMjQuMzMyIDE4NC45NzggMjI0LjczNyAxODQuMzEzQzIyNS4xNDMgMTgzLjY0NyAyMjUuNzI0IDE4My4xMDcgMjI2LjQxOCAxODIuNzUyQzIyNy4xMTEgMTgyLjM5NyAyMjcuODkgMTgyLjI0MSAyMjguNjY2IDE4Mi4zMDJDMjI5LjQ0MyAxODIuMzYyIDIzMC4xODggMTgyLjYzNiAyMzAuODE4IDE4My4wOTRMMzQ1Ljk5IDI2Ni44MzZDMzQ2LjUzNCAyNjcuMjIxIDM0Ni45NzggMjY3LjczIDM0Ny4yODUgMjY4LjMyMkMzNDcuNTkxIDI2OC45MTQgMzQ3Ljc1MSAyNjkuNTcxIDM0Ny43NTEgMjcwLjIzN0MzNDcuNzUxIDI3MC45MDQgMzQ3LjU5MSAyNzEuNTYgMzQ3LjI4NSAyNzIuMTUyQzM0Ni45NzggMjcyLjc0NCAzNDYuNTM0IDI3My4yNTQgMzQ1Ljk5IDI3My42MzlaIiBmaWxsPSIjRTVFNUU1IiBmaWxsLW9wYWNpdHk9IjAuNTUiLz4NCiAgPC9zdmc+\") !important;background:transparent;background-size:cover;background-repeat:no-repeat;background-position:center center;border-radius:50%;cursor:pointer;display:flex;width:25%;height:45%}.splide__track{border-radius:40px}.splide__slide{background-color:black}.splide__arrow svg{height:48px;width:48px}@media screen and (min-width: 1024px){.splide__arrow svg{height:92px;width:92px}}@media screen and (min-width: 1920px){.splide__arrow svg{height:128px;width:128px}}.img-thumbnail{border-radius:40px;width:100%;height:100%;object-fit:cover}";
 
-let MyComponent = class extends HTMLElement$1 {
-  constructor() {
-    super();
-    this.__registerHost();
+let MyComponent = class {
+  constructor(hostRef) {
+    registerInstance(this, hostRef);
     this.videoIds = '';
     this._videoIds = [];
   }
@@ -4653,31 +5023,11 @@ let MyComponent = class extends HTMLElement$1 {
     return (h("div", { class: "wrapper" }, h("div", { class: "splide" }, h("div", { class: "splide__arrows" }, h("button", { class: "splide__arrow splide__arrow--prev my-class-prev" }, h("svg", { width: "95", height: "161", viewBox: "0 0 95 161", fill: "none", xmlns: "http://www.w3.org/2000/svg" }, h("path", { d: "M5.05549 4.89757C3.7306 6.21975 2.67949 7.79024 1.96231 9.51915C1.24513 11.2481 0.875977 13.1014 0.875977 14.9732C0.875977 16.845 1.24513 18.6983 1.96231 20.4272C2.67949 22.1562 3.7306 23.7267 5.05549 25.0488L60.5071 80.5005L5.05549 135.952C2.38327 138.624 0.882028 142.249 0.882028 146.028C0.882028 149.807 2.38327 153.431 5.05549 156.103C7.72771 158.776 11.352 160.277 15.1311 160.277C18.9102 160.277 22.5345 158.776 25.2067 156.103L90.8055 90.5047C92.1304 89.1825 93.1815 87.612 93.8987 85.8831C94.6158 84.1542 94.985 82.3008 94.985 80.429C94.985 78.5573 94.6158 76.7039 93.8987 74.975C93.1815 73.2461 92.1304 71.6756 90.8055 70.3534L25.2067 4.75465C19.7759 -0.676182 10.6292 -0.676179 5.05549 4.89757Z", fill: "white", "fill-opacity": "0.35" }))), h("button", { class: "splide__arrow splide__arrow--next my-class-next" }, h("svg", { width: "95", height: "161", viewBox: "0 0 95 161", fill: "none", xmlns: "http://www.w3.org/2000/svg" }, h("path", { d: "M5.05549 4.89757C3.7306 6.21975 2.67949 7.79024 1.96231 9.51915C1.24513 11.2481 0.875977 13.1014 0.875977 14.9732C0.875977 16.845 1.24513 18.6983 1.96231 20.4272C2.67949 22.1562 3.7306 23.7267 5.05549 25.0488L60.5071 80.5005L5.05549 135.952C2.38327 138.624 0.882028 142.249 0.882028 146.028C0.882028 149.807 2.38327 153.431 5.05549 156.103C7.72771 158.776 11.352 160.277 15.1311 160.277C18.9102 160.277 22.5345 158.776 25.2067 156.103L90.8055 90.5047C92.1304 89.1825 93.1815 87.612 93.8987 85.8831C94.6158 84.1542 94.985 82.3008 94.985 80.429C94.985 78.5573 94.6158 76.7039 93.8987 74.975C93.1815 73.2461 92.1304 71.6756 90.8055 70.3534L25.2067 4.75465C19.7759 -0.676182 10.6292 -0.676179 5.05549 4.89757Z", fill: "white", "fill-opacity": "0.35" })))), h("div", { class: "splide__track" }, h("ul", { class: "splide__list" }, this._videoIds.map(id => (h("li", { class: "splide__slide", "data-splide-youtube": id }, h("img", { class: "img-thumbnail", src: `https://i3.ytimg.com/vi/${id}/maxresdefault.jpg` })))))))));
   }
   static get assetsDirs() { return ["assets"]; }
-  get el() { return this; }
+  get el() { return getElement(this); }
   static get watchers() { return {
     "videoIds": ["parsevideoIds"]
   }; }
-  static get style() { return dsVideoSliderCss; }
 };
-MyComponent = /*@__PURE__*/ proxyCustomElement(MyComponent, [0, "ds-video-slider", {
-    "videoIds": [513, "video-ids"],
-    "_videoIds": [32]
-  }]);
-function defineCustomElement$1() {
-  if (typeof customElements === "undefined") {
-    return;
-  }
-  const components = ["ds-video-slider"];
-  components.forEach(tagName => { switch (tagName) {
-    case "ds-video-slider":
-      if (!customElements.get(tagName)) {
-        customElements.define(tagName, MyComponent);
-      }
-      break;
-  } });
-}
+MyComponent.style = dsVideoSliderCss;
 
-const DsVideoSlider = MyComponent;
-const defineCustomElement = defineCustomElement$1;
-
-export { DsVideoSlider, defineCustomElement };
+export { MyComponent as ds_video_slider };

@@ -1,0 +1,58 @@
+@import '~swiper/swiper-bundle.min.css';
+@import '~plyr/dist/plyr.css';
+
+.swiper {
+  height: 300px;
+  width: 100%;
+}
+.swiper-slide {
+  border-radius: 12px;
+  // width: 300px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  filter: drop-shadow(20px 20px 15px rgba(0, 0, 0, 0.25));
+}
+
+.swiper-button-prev-custom {
+  left: 30%;
+  width: 128px;
+  height: 25%;
+}
+
+.swiper-button-next-custom {
+  right: 30%;
+  width: 128px;
+  height: 25%;
+}
+
+.swiper-button-prev:after,
+.swiper-rtl .swiper-button-next:after {
+  content: '';
+  display: none;
+}
+
+.swiper-button-next:after,
+.swiper-rtl .swiper-button-prev:after {
+  content: '';
+  display: none;
+}
+
+.swiper-slide-bg {
+  background-repeat: no-repeat;
+  background-size: 'cover';
+}
+
+.swiper-slide .video-container {
+  width: 100%;
+  height: 0;
+  position: relative;
+  padding-bottom: 56.25%;
+}
+.swiper-slide .video-container iframe {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}

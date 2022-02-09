@@ -1,6 +1,6 @@
 {
   "name": "stencil-elements",
-  "version": "0.0.3+2",
+  "version": "0.0.4",
   "private": false,
   "description": "Stencil Component Starter",
   "main": "dist/index.cjs.js",
@@ -30,7 +30,11 @@
   "dependencies": {
     "@splidejs/splide": "^3.6.12",
     "@splidejs/splide-extension-video": "^0.6.8",
-    "@stencil/core": "^2.13.0"
+    "@stencil/core": "^2.13.0",
+    "plyr": "^3.6.12",
+    "swiper": "^8.0.3",
+    "video.js": "^7.17.0",
+    "videojs-youtube": "^2.6.1"
   },
   "devDependencies": {
     "@stencil/sass": "^1.5.2",

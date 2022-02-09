@@ -6,6 +6,8 @@
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
 export namespace Components {
+    interface DsCarouselSlider {
+    }
     interface DsInteractiveMap {
     }
     interface DsVideoSlider {
@@ -13,6 +15,12 @@ export namespace Components {
     }
 }
 declare global {
+    interface HTMLDsCarouselSliderElement extends Components.DsCarouselSlider, HTMLStencilElement {
+    }
+    var HTMLDsCarouselSliderElement: {
+        prototype: HTMLDsCarouselSliderElement;
+        new (): HTMLDsCarouselSliderElement;
+    };
     interface HTMLDsInteractiveMapElement extends Components.DsInteractiveMap, HTMLStencilElement {
     }
     var HTMLDsInteractiveMapElement: {
@@ -26,11 +34,14 @@ declare global {
         new (): HTMLDsVideoSliderElement;
     };
     interface HTMLElementTagNameMap {
+        "ds-carousel-slider": HTMLDsCarouselSliderElement;
         "ds-interactive-map": HTMLDsInteractiveMapElement;
         "ds-video-slider": HTMLDsVideoSliderElement;
     }
 }
 declare namespace LocalJSX {
+    interface DsCarouselSlider {
+    }
     interface DsInteractiveMap {
         "onClickedContinent"?: (event: CustomEvent<MouseEvent>) => void;
         "onContinent"?: (event: CustomEvent<string>) => void;
@@ -39,6 +50,7 @@ declare namespace LocalJSX {
         "videoIds"?: string;
     }
     interface IntrinsicElements {
+        "ds-carousel-slider": DsCarouselSlider;
         "ds-interactive-map": DsInteractiveMap;
         "ds-video-slider": DsVideoSlider;
     }
@@ -47,6 +59,7 @@ export { LocalJSX as JSX };
 declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
+            "ds-carousel-slider": LocalJSX.DsCarouselSlider & JSXBase.HTMLAttributes<HTMLDsCarouselSliderElement>;
             "ds-interactive-map": LocalJSX.DsInteractiveMap & JSXBase.HTMLAttributes<HTMLDsInteractiveMapElement>;
             "ds-video-slider": LocalJSX.DsVideoSlider & JSXBase.HTMLAttributes<HTMLDsVideoSliderElement>;
         }
